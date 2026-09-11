@@ -2079,30 +2079,39 @@
             lengthMap[len]++;
         });
 
-        let totalInstances = 0;
-        let higherStreaksDetails = [];
-        let higherOccurrencesTotal = 0;
+        const targetCount = lengthMap[targetStreak] || 0;
+        let baseCapital = targetCount * betAmt;
 
-        Object.keys(lengthMap).forEach(lenStr => {
-            const len = parseInt(lenStr, 10);
+        const higherLengths = Object.keys(lengthMap)
+            .map(Number)
+            .filter(len => len > targetStreak)
+            .sort((a, b) => a - b);
+
+        let deductionRowsHtml = '';
+        let totalDeduction = 0;
+
+        higherLengths.forEach(len => {
             const count = lengthMap[len];
-            if (len >= targetStreak) {
-                totalInstances += count;
-            }
-            if (len > targetStreak) {
-                higherOccurrencesTotal += count;
-                higherStreaksDetails.push(`${len} rounds $\times$ ${count} occurrences`);
-            }
+            const deduction = count * betAmt;
+            totalDeduction += deduction;
+            deductionRowsHtml += `
+                <tr>
+                    <td><strong>Streak Length ${len} Rounds</strong></td>
+                    <td>${count} occurrences $\times$ ${betAmt}</td>
+                    <td><strong class="negative">-${deduction}</strong></td>
+                </tr>
+            `;
         });
 
-        const totalCapital = totalInstances * betAmt;
-        const higherDeductionCount = higherOccurrencesTotal;
-        const higherDeductionCapital = higherDeductionCount * betAmt;
-        const netSubtraction = totalCapital - higherDeductionCapital;
+        const finalNet = baseCapital - totalDeduction;
 
         const container = document.getElementById('streakCalcContent');
         
-        let higherStrDesc = higherStreaksDetails.length > 0 ? higherStreaksDetails.join(', ') : 'None';
+        let formulaPartsStr = `${baseCapital}`;
+        higherLengths.forEach(len => {
+            const count = lengthMap[len];
+            formulaPartsStr += ` - (${count} $\times$ ${betAmt})`;
+        });
 
         container.innerHTML = `
             <table class="dual-summary-table">
@@ -2115,24 +2124,15 @@
                 </thead>
                 <tbody>
                     <tr>
-                        <td><strong>Total Trigger Instances (Streak $\ge$ ${targetStreak} rounds)</strong></td>
-                        <td>There are ${totalInstances} recorded instances where a streak reached at least ${targetStreak} rounds. Placing a bet of ${betAmt} on each yields total deployed capital.</td>
-                        <td><strong>$${totalInstances} \times ${betAmt} = ${totalCapital}</strong></td>
+                        <td><strong>Target Streak (${targetStreak} Rounds)</strong></td>
+                        <td>${targetCount} occurrences $\times$ ${betAmt}</td>
+                        <td><strong class="positive">+${baseCapital}</strong></td>
                     </tr>
+                    ${deductionRowsHtml}
                     <tr>
-                        <td><strong>Higher Streak Deductions (Lengths $>$ ${targetStreak})</strong></td>
-                        <td>Higher streaks (${higherStrDesc}) pushed past your ${targetStreak}-round threshold. Summing these gives ${higherOccurrencesTotal} instances.</td>
-                        <td><strong>${higherOccurrencesTotal} instances</strong></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Capital Adjustment for Higher Streaks</strong></td>
-                        <td>Deducting adjustments corresponding to these ${higherOccurrencesTotal} overlapping higher-round events.</td>
-                        <td><strong>$${higherOccurrencesTotal} \times ${betAmt} = ${higherDeductionCapital}</strong></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Net Subtraction Verification</strong></td>
-                        <td>Subtracting higher-tier exposure from total deployed capital.</td>
-                        <td><strong class="positive">$${totalCapital} - ${higherDeductionCapital} = ${netSubtraction}</strong></td>
+                        <td><strong>Final Net Calculation</strong></td>
+                        <td>${formulaPartsStr}</td>
+                        <td><strong class="${finalNet >= 0 ? 'positive' : 'negative'}">${finalNet}</strong></td>
                     </tr>
                 </tbody>
             </table>
