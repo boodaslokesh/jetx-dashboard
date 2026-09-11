@@ -2152,9 +2152,36 @@
                         streaks.push([...currentStreak]);
                     }
 
-                    streaks.sort((a, b) => b.length - a.length);
+                    // Group streaks by their length (count) to aggregate occurrences
+                    const lengthMap = {};
+                    streaks.forEach(s => {
+                        const len = s.length;
+                        if (!lengthMap[len]) {
+                            lengthMap[len] = {
+                                count: 0,
+                                periods: []
+                            };
+                        }
+                        lengthMap[len].count++;
+                        lengthMap[len].periods.push({
+                            start: `${s[0].date} ${s[0].time}`,
+                            end: `${s[s.length - 1].date} ${s[s.length - 1].time}`,
+                            timestamp: parseDateToTimestamp(s[0].date) + s[0].sortKey
+                        });
+                    });
 
-                    if (streaks.length > 0) {
+                    // Convert map to array and sort by streak length descending
+                    let aggregatedStreaks = Object.keys(lengthMap).map(len => {
+                        return {
+                            length: parseInt(len, 10),
+                            occurrences: lengthMap[len].count,
+                            periods: lengthMap[len].periods
+                        };
+                    });
+
+                    aggregatedStreaks.sort((a, b) => b.length - a.length);
+
+                    if (aggregatedStreaks.length > 0) {
                         streakSummaryBox.style.display = 'flex';
                         let summaryHtml = `
                             <table class="dual-summary-table">
@@ -2162,25 +2189,26 @@
                                     <tr>
                                         <th>Rank</th>
                                         <th>Streak Count</th>
+                                        <th>Occurrences</th>
                                         <th>Period / Timestamp Range</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                         `;
-                        const topCount = Math.min(5, streaks.length);
+                        const topCount = Math.min(10, aggregatedStreaks.length);
                         for (let i = 0; i < topCount; i++) {
-                            const s = streaks[i];
-                            const startTime = s[0].time;
-                            const startDate = s[0].date;
-                            const endTime = s[s.length - 1].time;
-                            const endDate = s[s.length - 1].date;
+                            const item = aggregatedStreaks[i];
                             const ordinal = (i === 0) ? "Highest" : (i === 1) ? "2nd Highest" : (i === 2) ? "3rd Highest" : `${i+1}th Highest`;
+                            
+                            // Format period list cleanly or show first-last / comma separated
+                            const periodStr = item.periods.map(p => `${p.start} → ${p.end}`).join('<br>');
                             
                             summaryHtml += `
                                 <tr>
                                     <td><strong>${ordinal}</strong></td>
-                                    <td><strong style="color: var(--accent-cyan);">${s.length} rounds</strong></td>
-                                    <td>${startDate} ${startTime} &rarr; ${endDate} ${endTime}</td>
+                                    <td><strong style="color: var(--accent-cyan);">${item.length} rounds</strong></td>
+                                    <td><strong style="color: var(--accent-green);">${item.occurrences} times</strong></td>
+                                    <td>${periodStr}</td>
                                 </tr>
                             `;
                         }
