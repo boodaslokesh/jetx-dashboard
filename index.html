@@ -1259,6 +1259,28 @@
                 </div>
             </div>
 
+            <!-- Streak Calculation & Capital Analysis Row above Streak Analysis Summary -->
+            <div class="streak-summary-box" id="streakCalcBox" style="display: flex;">
+                <h4>Streak Calculation & Capital Analysis</h4>
+                <div class="dual-bet-toolbar-row" style="margin-bottom: 6px; border-bottom: none; padding-bottom: 0;">
+                    <div class="filter-group">
+                        <label>BET AMOUNT</label>
+                        <input type="number" id="calcBetAmt" value="10" min="0" step="any">
+                    </div>
+                    <div class="filter-group">
+                        <label>STREAK VALUE</label>
+                        <input type="number" id="calcStreakVal" value="3" min="1" step="1">
+                    </div>
+                    <div class="filter-group">
+                        <label>&nbsp;</label>
+                        <button class="btn-submit-api" onclick="calculateStreakAnalysis()">Submit</button>
+                    </div>
+                </div>
+                <div class="streak-summary-content" id="streakCalcContent">
+                    Enter bet amount and streak value above and click Submit to view calculation.
+                </div>
+            </div>
+
             <div class="streak-summary-box" id="streakSummaryBox" style="display: none;">
                 <h4>Streak Analysis Summary</h4>
                 <div class="streak-summary-content" id="streakSummaryContent"></div>
@@ -2023,6 +2045,100 @@
         tbody.innerHTML = html;
     }
 
+    function calculateStreakAnalysis() {
+        const betAmt = parseFloat(document.getElementById('calcBetAmt').value) || 0;
+        const targetStreak = parseInt(document.getElementById('calcStreakVal').value, 10) || 1;
+        
+        const streakInputVal = document.getElementById('streakInputFilter').value.trim();
+        const n = streakInputVal !== "" ? parseFloat(streakInputVal) : 1;
+        const threshold = n + 1.0;
+
+        let streaks = [];
+        let currentStreak = [];
+
+        currentFilteredData.forEach(item => {
+            if (item.multiplier < threshold) {
+                currentStreak.push(item);
+            } else {
+                if (currentStreak.length > 0) {
+                    streaks.push([...currentStreak]);
+                    currentStreak = [];
+                }
+            }
+        });
+        if (currentStreak.length > 0) {
+            streaks.push([...currentStreak]);
+        }
+
+        const lengthMap = {};
+        streaks.forEach(s => {
+            const len = s.length;
+            if (!lengthMap[len]) {
+                lengthMap[len] = 0;
+            }
+            lengthMap[len]++;
+        });
+
+        let totalInstances = 0;
+        let higherStreaksDetails = [];
+        let higherOccurrencesTotal = 0;
+
+        Object.keys(lengthMap).forEach(lenStr => {
+            const len = parseInt(lenStr, 10);
+            const count = lengthMap[len];
+            if (len >= targetStreak) {
+                totalInstances += count;
+            }
+            if (len > targetStreak) {
+                higherOccurrencesTotal += count;
+                higherStreaksDetails.push(`${len} rounds $\times$ ${count} occurrences`);
+            }
+        });
+
+        const totalCapital = totalInstances * betAmt;
+        const higherDeductionCount = higherOccurrencesTotal;
+        const higherDeductionCapital = higherDeductionCount * betAmt;
+        const netSubtraction = totalCapital - higherDeductionCapital;
+
+        const container = document.getElementById('streakCalcContent');
+        
+        let higherStrDesc = higherStreaksDetails.length > 0 ? higherStreaksDetails.join(', ') : 'None';
+
+        container.innerHTML = `
+            <table class="dual-summary-table">
+                <thead>
+                    <tr>
+                        <th>Metric / Calculation Step</th>
+                        <th>Details / Breakdown</th>
+                        <th>Result / Capital</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Total Trigger Instances (Streak $\ge$ ${targetStreak} rounds)</strong></td>
+                        <td>There are ${totalInstances} recorded instances where a streak reached at least ${targetStreak} rounds. Placing a bet of ${betAmt} on each yields total deployed capital.</td>
+                        <td><strong>$${totalInstances} \times ${betAmt} = ${totalCapital}</strong></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Higher Streak Deductions (Lengths $>$ ${targetStreak})</strong></td>
+                        <td>Higher streaks (${higherStrDesc}) pushed past your ${targetStreak}-round threshold. Summing these gives ${higherOccurrencesTotal} instances.</td>
+                        <td><strong>${higherOccurrencesTotal} instances</strong></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Capital Adjustment for Higher Streaks</strong></td>
+                        <td>Deducting adjustments corresponding to these ${higherOccurrencesTotal} overlapping higher-round events.</td>
+                        <td><strong>$${higherOccurrencesTotal} \times ${betAmt} = ${higherDeductionCapital}</strong></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Net Subtraction Verification</strong></td>
+                        <td>Subtracting higher-tier exposure from total deployed capital.</td>
+                        <td><strong class="positive">$${totalCapital} - ${higherDeductionCapital} = ${netSubtraction}</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        `;
+    }
+
     function applyFilters() {
         const selectedDate = document.getElementById('dateSelect').value;
         const fH = document.getElementById('fromHour').value;
@@ -2129,6 +2245,7 @@
             }
 
             renderDualBetAllDatesTable(b1Amt, c1Target, b2Amt, c2Target);
+            calculateStreakAnalysis();
 
             const streakInputVal = document.getElementById('streakInputFilter').value.trim();
             if (streakInputVal !== "") {
@@ -2152,7 +2269,6 @@
                         streaks.push([...currentStreak]);
                     }
 
-                    // Group streaks by their length (count) to aggregate occurrences
                     const lengthMap = {};
                     streaks.forEach(s => {
                         const len = s.length;
@@ -2170,7 +2286,6 @@
                         });
                     });
 
-                    // Convert map to array and sort by streak length descending
                     let aggregatedStreaks = Object.keys(lengthMap).map(len => {
                         return {
                             length: parseInt(len, 10),
@@ -2199,8 +2314,6 @@
                         for (let i = 0; i < topCount; i++) {
                             const item = aggregatedStreaks[i];
                             const ordinal = (i === 0) ? "Highest" : (i === 1) ? "2nd Highest" : (i === 2) ? "3rd Highest" : `${i+1}th Highest`;
-                            
-                            // Format period list cleanly or show first-last / comma separated
                             const periodStr = item.periods.map(p => `${p.start} → ${p.end}`).join('<br>');
                             
                             summaryHtml += `
