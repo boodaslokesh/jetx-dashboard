@@ -1281,6 +1281,28 @@
                 </div>
             </div>
 
+            <!-- Newly requested table: Peak Combined Profit, Peak Status, Cumulative Combined P/L based on streak logic -->
+            <div class="streak-summary-box" id="streakPeakStatusBox" style="display: flex;">
+                <h4>Peak Combined Profit, Peak Status & Cumulative Combined P/L</h4>
+                <div class="streak-summary-content">
+                    <table class="dual-summary-table" id="streakPeakStatusTable">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Highest Cumulative Profit</th>
+                                <th>Highest Profit Time</th>
+                                <th>Lowest Cumulative Profit</th>
+                                <th>Lowest Cumulative Time</th>
+                                <th>Current/Final Cumulative P/L</th>
+                            </tr>
+                        </thead>
+                        <tbody id="streakPeakStatusBody">
+                            <tr><td colspan="6" class="no-data">Calculate streak analysis above to load peak status metrics...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <div class="streak-summary-box" id="streakSummaryBox" style="display: none;">
                 <h4>Streak Analysis Summary</h4>
                 <div class="streak-summary-content" id="streakSummaryContent"></div>
@@ -2051,7 +2073,7 @@
         
         const streakInputVal = document.getElementById('streakInputFilter').value.trim();
         const n = streakInputVal !== "" ? parseFloat(streakInputVal) : 1;
-        const threshold = n + 1.0;
+        const threshold = 2.00; // Fixed 2.00x cashout target for the requested sequence logic
 
         let streaks = [];
         let currentStreak = [];
@@ -2137,6 +2159,93 @@
                 </tbody>
             </table>
         `;
+
+        // Compute and populate Peak Combined Profit, Peak Status & Cumulative Combined P/L table across all dates or selected date for this specific betting logic
+        updateStreakPeakStatusTable(betAmt, targetStreak);
+    }
+
+    function updateStreakPeakStatusTable(betAmt, targetStreak) {
+        const tbody = document.getElementById('streakPeakStatusBody');
+        if (!tbody) return;
+
+        if (availableSortedDates.length === 0 || allRowsData.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="no-data">No data available</td></tr>`;
+            return;
+        }
+
+        let html = '';
+
+        availableSortedDates.forEach(dateStr => {
+            const dateRows = allRowsData.filter(item => item.date === dateStr);
+            if (dateRows.length === 0) return;
+
+            // Simulate the exact streak betting strategy for this date:
+            // Wait for targetStreak consecutive values < 2.00x, then place bet on the next round at 2.00x target.
+            let cumulativeProfit = 0;
+            let currentConsecutiveBelow2 = 0;
+            let waitingForBet = false;
+
+            let peakProfit = -Infinity;
+            let peakTime = '-';
+            let lowestProfit = Infinity;
+            let lowestTime = '-';
+
+            dateRows.forEach(item => {
+                let roundPnl = 0;
+                let didBetThisRound = false;
+
+                if (waitingForBet) {
+                    didBetThisRound = true;
+                    cumulativeProfit -= betAmt;
+                    if (item.multiplier >= 2.00) {
+                        cumulativeProfit += betAmt * 2.00; // won
+                    } else {
+                        // lost below 2.00x
+                    }
+                    waitingForBet = false;
+                    currentConsecutiveBelow2 = 0;
+                }
+
+                if (item.multiplier < 2.00) {
+                    currentConsecutiveBelow2++;
+                    if (currentConsecutiveBelow2 === targetStreak) {
+                        waitingForBet = true;
+                    }
+                } else {
+                    currentConsecutiveBelow2 = 0;
+                    waitingForBet = false;
+                }
+
+                if (cumulativeProfit > peakProfit) {
+                    peakProfit = cumulativeProfit;
+                    peakTime = item.time;
+                }
+                if (cumulativeProfit < lowestProfit) {
+                    lowestProfit = cumulativeProfit;
+                    lowestTime = item.time;
+                }
+            });
+
+            if (peakProfit === -Infinity) peakProfit = 0;
+            if (lowestProfit === Infinity) lowestProfit = 0;
+
+            const peakSign = peakProfit >= 0 ? '+' : '';
+            const lowSign = lowestProfit >= 0 ? '+' : '';
+            const finalSign = cumulativeProfit >= 0 ? '+' : '';
+
+            html += `
+                <tr>
+                    <td><strong>${dateStr}</strong></td>
+                    <td><strong class="${peakProfit >= 0 ? 'positive' : 'negative'}">${peakSign}${formatAmount(peakProfit)}</strong></td>
+                    <td><strong style="color: var(--accent-cyan);">${peakTime}</strong></td>
+                    <td><strong class="${lowestProfit >= 0 ? 'positive' : 'negative'}">${lowSign}${formatAmount(lowestProfit)}</strong></td>
+                    <td><strong style="color: var(--accent-cyan);">${lowestTime}</strong></td>
+                    <td><strong class="${cumulativeProfit >= 0 ? 'positive' : 'negative'}">${finalSign}${formatAmount(cumulativeProfit)}</strong></td>
+                </tr>
+            `;
+        });
+
+        tbody.innerHTML = html;
     }
 
     function applyFilters() {
