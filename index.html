@@ -400,6 +400,16 @@
             gap: 1px;
         }
 
+        .metric-card.interactive-balance {
+            cursor: pointer;
+            transition: border-color 0.2s ease, background-color 0.2s ease;
+        }
+
+        .metric-card.interactive-balance:hover {
+            border-color: var(--accent-cyan);
+            background-color: rgba(0, 229, 255, 0.03);
+        }
+
         .metric-title {
             font-size: 8px;
             letter-spacing: 0.5px;
@@ -1087,18 +1097,16 @@
             <!-- Transparent Background Watermark for Aviator Live -->
             <div class="aviator-watermark">JETX Live</div>
 
-
-
             <div class="metrics-grid">
                 <div class="metric-card">
                     <span class="metric-title">Rounds</span>
                     <span class="metric-value" id="statRounds">-</span>
                     <span class="metric-sub" id="statDateSub">Date</span>
                 </div>
-                <div class="metric-card">
+                <div class="metric-card interactive-balance" id="balanceCard" title="Click or Hover to Update Balance">
                     <span class="metric-title">Current Balance</span>
                     <span class="metric-value" id="statCurrentBalance" style="color: var(--accent-cyan);">0.00</span>
-                    <span class="metric-sub">Auto Live (3s)</span>
+                    <span class="metric-sub">Auto Live (3s) / Click to Update</span>
                 </div>
                 <div class="metric-card">
                     <span class="metric-title">Best Strategy</span>
@@ -1516,7 +1524,10 @@
         }
     }
 
-
+    // Attach click listener for manual update on hover/click card
+    document.getElementById('balanceCard').addEventListener('click', () => {
+        fetchCurrentBalance();
+    });
 
     async function submitApiValues() {
         const amt1 = parseFloat(document.getElementById('inputAmount1').value);
@@ -2001,7 +2012,7 @@
         
         const streakInputVal = document.getElementById('streakInputFilter').value.trim();
         const n = streakInputVal !== "" ? parseFloat(streakInputVal) : 1;
-        const threshold = 2.00; // Fixed 2.00x cashout target for the requested sequence logic
+        const threshold = 2.00;
 
         let streaks = [];
         let currentStreak = [];
@@ -2881,13 +2892,10 @@
     resetFilterPLInputs();
     fetchCSVData();
     fetchCurrentBalance();
-    fetchBetStatus();
 
     setInterval(fetchCSVData, 5000);
-    setInterval(fetchCurrentBalance, 2000);
-    setInterval(fetchBetStatus, 3000); 
+    setInterval(fetchCurrentBalance, 3000); // Updated to 3 seconds auto-refresh interval
 </script>
 
 </body>
 </html>
-
