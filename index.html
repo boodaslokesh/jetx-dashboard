@@ -1517,35 +1517,17 @@
 
     async function fetchCurrentBalance() {
         try {
-            const response = await fetch(CURRENT_BALANCE_URL, {
-                method: 'POST',
+            const response = await fetch(`${CURRENT_BALANCE_URL}?_t=${Date.now()}`, {
+                method: 'GET',
                 headers: {
-                    'apikey': 'sb_publishable_OV2zHzO_WtYIjskzmuDTVg_YmolirNP',
-                    'Authorization': 'Bearer sb_publishable_OV2zHzO_WtYIjskzmuDTVg_YmolirNP',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ "p_username": "lokesh" })
+                    'ngrok-skip-browser-warning': 'true'
+                }
             });
             if (!response.ok) throw new Error("Network response failed");
-            const data = await response.json();
+            const text = await response.text();
             
-            let bal = 0.00;
-            if (Array.isArray(data) && data.length > 0) {
-                bal = data[0].get_latest_balance !== undefined ? data[0].get_latest_balance : data[0];
-            } else if (data && typeof data === 'object') {
-                bal = data.get_latest_balance !== undefined ? data.get_latest_balance : data;
-            } else {
-                bal = data;
-            }
-
-            let formattedBal = "0.00";
-            if (typeof bal === 'number') {
-                formattedBal = bal.toFixed(2);
-            } else if (!isNaN(parseFloat(bal))) {
-                formattedBal = parseFloat(bal).toFixed(2);
-            } else {
-                formattedBal = String(bal);
-            }
+            let bal = parseFloat(text.trim()) || 0.00;
+            let formattedBal = bal.toFixed(2);
             document.getElementById('statCurrentBalance').innerText = formattedBal;
         } catch (err) {
             console.error("Error fetching current balance:", err);
