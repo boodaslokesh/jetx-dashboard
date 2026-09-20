@@ -1339,10 +1339,11 @@
                                 <th>Total Target Amount Crossed (Adjusted)</th>
                                 <th>Total Max Drawdown Target (Adjusted)</th>
                                 <th>Adjusted Metrics Breakdown</th>
+                                <th>Total Cumulative Combined P/L</th>
                             </tr>
                         </thead>
                         <tbody id="fpSummaryBody">
-                            <tr><td colspan="5" class="no-data">Loading summary...</td></tr>
+                            <tr><td colspan="6" class="no-data">Loading summary...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1362,10 +1363,11 @@
                                 <th>Target Cross Time</th>
                                 <th>Target Status</th>
                                 <th>Cumulative Combined P/L</th>
+                                <th>Total Cumulative Combined P/L</th>
                             </tr>
                         </thead>
                         <tbody id="fpDualBetAllDatesBody">
-                            <tr><td colspan="9" class="no-data">Loading data for specific time range across all dates...</td></tr>
+                            <tr><td colspan="10" class="no-data">Loading data for specific time range across all dates...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1835,15 +1837,14 @@
         if (!tbody) return;
 
         if (availableSortedDates.length === 0 || allRowsData.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="9" class="no-data">No data available for dates</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="10" class="no-data">No data available for dates</td></tr>`;
             if (summaryBody) {
-                summaryBody.innerHTML = `<tr><td colspan="5" class="no-data">No data available</td></tr>`;
+                summaryBody.innerHTML = `<tr><td colspan="6" class="no-data">No data available</td></tr>`;
             }
             return;
         }
 
-        let computedRows = [];
-        let rawDateResults = [];
+        let dateCalculations = [];
 
         availableSortedDates.forEach(dateStr => {
             const dateRows = allRowsData.filter(item => {
@@ -1854,7 +1855,7 @@
             });
 
             if (dateRows.length === 0) {
-                rawDateResults.push({ dateStr, isEmpty: true });
+                dateCalculations.push({ dateStr, isEmpty: true, cumulativeProfit: 0 });
                 return;
             }
 
@@ -1918,7 +1919,7 @@
                 }
             }
 
-            let rowObj = {
+            dateCalculations.push({
                 dateStr,
                 peakCombinedProfit,
                 peakDateTime,
@@ -1929,10 +1930,33 @@
                 hasCrossedTarget,
                 cumulativeProfit,
                 isEmpty: false
-            };
-            computedRows.push(rowObj);
-            rawDateResults.push(rowObj);
+            });
         });
+
+        // Compute Total Cumulative Combined P/L from bottom to top (oldest to newest)
+        let runningTotalCumulativePL = 0;
+        let computedRows = [];
+        let rawDateResults = [];
+
+        for (let i = dateCalculations.length - 1; i >= 0; i--) {
+            let r = dateCalculations[i];
+            if (!r.isEmpty) {
+                runningTotalCumulativePL += r.cumulativeProfit;
+                r.runningTotalCumulativePL = runningTotalCumulativePL;
+            } else {
+                r.runningTotalCumulativePL = runningTotalCumulativePL;
+            }
+            computedRows.push(r);
+            rawDateResults.push(r);
+        }
+
+        computedRows.reverse();
+        rawDateResults.reverse();
+
+        const totalCumulativePLInput = document.getElementById('fpTotalCumulativePL');
+        if (totalCumulativePLInput) {
+            totalCumulativePLInput.value = `${runningTotalCumulativePL >= 0 ? '+' : ''}${formatAmount(runningTotalCumulativePL)}`;
+        }
 
         let peakProfits = computedRows.map(r => r.peakCombinedProfit);
         let minPeak = peakProfits.length > 0 ? Math.min(...peakProfits) : null;
@@ -1984,7 +2008,7 @@
                 html += `
                     <tr>
                         <td><strong>${r.dateStr}</strong></td>
-                        <td colspan="8" class="no-data">No records in selected time range</td>
+                        <td colspan="9" class="no-data">No records in selected time range</td>
                     </tr>
                 `;
             } else {
@@ -1993,6 +2017,7 @@
                 const crossDdSign = r.targetCrossDrawdown >= 0 ? '+' : '';
                 const crossAmtSign = (typeof r.targetCrossAmount === 'number' && r.targetCrossAmount >= 0) ? '+' : '';
                 const finalPlSign = r.cumulativeProfit >= 0 ? '+' : '';
+                const totalCumSign = r.runningTotalCumulativePL >= 0 ? '+' : '';
 
                 let peakStr = `${peakSign}${formatAmount(r.peakCombinedProfit)}`;
                 if (r.peakCombinedProfit === minPeak) peakStr += ' (L)';
@@ -2020,6 +2045,8 @@
                 if (r.cumulativeProfit === minCum) cumStr += ' (L)';
                 if (r.cumulativeProfit === maxCum) cumStr += ' (H)';
 
+                let totalCumStr = `${totalCumSign}${formatAmount(r.runningTotalCumulativePL)}`;
+
                 const statusBadge = r.hasCrossedTarget 
                     ? `<span style="color: var(--accent-green); font-size: 16px; font-weight: bold;">&#10003;</span>` 
                     : `<span style="color: var(--accent-red); font-size: 16px; font-weight: bold;">&#10007;</span>`;
@@ -2035,6 +2062,7 @@
                         <td><strong style="color: var(--accent-cyan);">${r.targetCrossTime}</strong></td>
                         <td>${statusBadge}</td>
                         <td><strong class="${r.cumulativeProfit >= 0 ? 'positive' : 'negative'}">${cumStr}</strong></td>
+                        <td><strong class="${r.runningTotalCumulativePL >= 0 ? 'positive' : 'negative'}">${totalCumStr}</strong></td>
                     </tr>
                 `;
             }
@@ -2050,6 +2078,7 @@
                     <td><strong class="${totalAdjustedTargetCrossed >= 0 ? 'positive' : 'negative'}">${totalAdjCrossedStr}</strong></td>
                     <td><strong class="negative">${formatAmount(totalAdjustedDD)}</strong></td>
                     <td><strong class="${sumAdjustedVal >= 0 ? 'positive' : 'negative'}">${sumAdjustedStr}</strong></td>
+                    <td><strong class="${runningTotalCumulativePL >= 0 ? 'positive' : 'negative'}">${runningTotalCumulativePL >= 0 ? '+' : ''}${formatAmount(runningTotalCumulativePL)}</strong></td>
                 </tr>
             `;
         }
