@@ -58,8 +58,8 @@
         .control-row {
             display: flex;
             flex-direction: row;
-            flex-wrap: nowrap;
-            gap: 4px;
+            flex-wrap: wrap;
+            gap: 6px;
             align-items: flex-end;
             width: 100%;
         }
@@ -69,7 +69,12 @@
             flex-direction: column;
             gap: 2px;
             flex: 1;
-            min-width: 0;
+            min-width: 70px;
+        }
+
+        .filter-group.time-group {
+            flex: 2;
+            min-width: 140px;
         }
 
         .filter-group label {
@@ -82,7 +87,7 @@
             text-overflow: ellipsis;
         }
 
-        input {
+        input, select {
             background-color: var(--bg-input);
             border: 1px solid var(--border-color);
             color: var(--text-main);
@@ -94,8 +99,19 @@
             height: 26px;
         }
 
-        input:focus {
+        input:focus, select:focus {
             border-color: var(--accent-cyan);
+        }
+
+        .time-select-row {
+            display: flex;
+            gap: 2px;
+        }
+
+        .time-select-row select {
+            padding: 2px 1px;
+            font-size: 9px;
+            text-align: center;
         }
 
         .btn-sync {
@@ -103,7 +119,7 @@
             color: #070b14;
             border: none;
             font-weight: bold;
-            padding: 0 8px;
+            padding: 0 10px;
             border-radius: 3px;
             cursor: pointer;
             font-size: 10px;
@@ -183,6 +199,25 @@
             font-weight: bold;
             display: inline-block;
             margin-left: 4px;
+            align-self: center;
+        }
+
+        @media (max-width: 600px) {
+            .control-row {
+                flex-wrap: nowrap;
+            }
+            .filter-group {
+                min-width: 0;
+                flex: 1;
+            }
+            .filter-group.time-group {
+                flex: 2;
+                min-width: 0;
+            }
+            .btn-sync {
+                padding: 0 6px;
+                font-size: 9px;
+            }
         }
     </style>
 </head>
@@ -191,24 +226,46 @@
     <!-- 1. Independent Strategy Box first -->
     <div class="independent-strategy-box">
         <div class="strategy-narrative" id="independentStrategyText">
-            Loading optimal parameters from full data logs[cite: 3]...
+            Loading optimal parameters from full data logs...
         </div>
     </div>
 
     <!-- 2. Control Panel next -->
     <div class="control-panel">
+        <!-- Row 1: Bet 1, Bet 2, Target P/L, Reset -->
         <div class="control-row">
             <div class="filter-group">
-                <label for="bet1Input">Bet 1 Amount</label>
+                <label for="bet1Input">Bet 1</label>
                 <input type="number" id="bet1Input" value="10">
             </div>
             <div class="filter-group">
-                <label for="bet2Input">Bet 2 Amount</label>
+                <label for="bet2Input">Bet 2</label>
                 <input type="number" id="bet2Input" value="10">
             </div>
             <div class="filter-group">
-                <label for="plTargetInput">Target P/L</label>
+                <label for="plTargetInput">Target</label>
                 <input type="number" id="plTargetInput" value="400">
+            </div>
+            <button class="btn-sync" style="background: var(--border-color); color: var(--text-main);" onclick="resetTimeFilter()">Reset</button>
+        </div>
+
+        <!-- Row 2: From Time, To Time, Run Analysis, Loading Indicator -->
+        <div class="control-row" style="margin-top: 4px;">
+            <div class="filter-group time-group">
+                <label>From (HH:MM:SS)</label>
+                <div class="time-select-row">
+                    <select id="fromHour"></select>
+                    <select id="fromMinute"></select>
+                    <select id="fromSecond"></select>
+                </div>
+            </div>
+            <div class="filter-group time-group">
+                <label>To (HH:MM:SS)</label>
+                <div class="time-select-row">
+                    <select id="toHour"></select>
+                    <select id="toMinute"></select>
+                    <select id="toSecond"></select>
+                </div>
             </div>
             <button class="btn-sync" onclick="scheduleCalculation()">Run Analysis</button>
             <span id="loadingIndicator" class="loading-overlay" style="display:none;">Loading...</span>
@@ -327,7 +384,7 @@
 </div>
 
 <script>
-    const AVIATOR_URL = "https://attacks-vii-amend-interpreted.trycloudflare.com/jetxnewSep.csv";
+    const AVIATOR_URL = "https://attacks-vii-amend-interpreted.trycloudflare.com/aviator.csv";
     const CURRENT_BALANCE_URL = "https://attacks-vii-amend-interpreted.trycloudflare.com/balance.txt";
     const BET_STATUS_URL = "https://aviator-strategy-proxy-api-f1wq2z.5sc6y6-1.usa-e2.cloudhub.io/lokeshboodas/betStatus";
     const POST_TRIGGER_URL = "https://aviator-strategy-proxy-api-f1wq2z.5sc6y6-1.usa-e2.cloudhub.io/optimal";
@@ -335,6 +392,39 @@
 
     let allRowsData = [];
     let calculationTimer = null;
+
+    function initTimeDropdowns() {
+        const hours = Array.from({length: 24}, (_, i) => String(i).padStart(2, '0'));
+        const minutesSeconds = Array.from({length: 60}, (_, i) => String(i).padStart(2, '0'));
+
+        const populate = (id, arr, defaultVal) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.innerHTML = arr.map(val => `<option value="${val}" ${val === defaultVal ? 'selected' : ''}>${val}</option>`).join('');
+        };
+
+        populate('fromHour', hours, '00');
+        populate('fromMinute', minutesSeconds, '00');
+        populate('fromSecond', minutesSeconds, '00');
+
+        populate('toHour', hours, '23');
+        populate('toMinute', minutesSeconds, '59');
+        populate('toSecond', minutesSeconds, '59');
+    }
+
+    function getFromTime() {
+        const h = document.getElementById('fromHour').value || '00';
+        const m = document.getElementById('fromMinute').value || '00';
+        const s = document.getElementById('fromSecond').value || '00';
+        return `${h}:${m}:${s}`;
+    }
+
+    function getToTime() {
+        const h = document.getElementById('toHour').value || '23';
+        const m = document.getElementById('toMinute').value || '59';
+        const s = document.getElementById('toSecond').value || '59';
+        return `${h}:${m}:${s}`;
+    }
 
     async function fetchCurrentBalance() {
         try {
@@ -368,11 +458,11 @@
         const payload = {
             "targetAmount": targetAmountVal,
             "strategies": [
-                { "bet1": dynamicBet1, "cashou1": 9, "bet2": dynamicBet2, "cashout2": 30 },
-                { "bet1": dynamicBet1, "cashou1": 30, "bet2": dynamicBet2, "cashout2": 9 },
-                { "bet1": dynamicBet1, "cashou1": 8, "bet2": dynamicBet2, "cashout2": 30 },
-                { "bet1": dynamicBet1, "cashou1": 30, "bet2": dynamicBet2, "cashout2": 8 },
-                { "bet1": dynamicBet1, "cashou1": 12, "bet2": dynamicBet2, "cashout2": 12 }
+                { "bet1": dynamicBet1, "cashou1": 18, "bet2": dynamicBet2, "cashout2": 50 },
+                { "bet1": dynamicBet1, "cashou1": 50, "bet2": dynamicBet2, "cashout2": 18 },
+                { "bet1": dynamicBet1, "cashou1": 12, "bet2": dynamicBet2, "cashout2": 30 },
+                { "bet1": dynamicBet1, "cashou1": 30, "bet2": dynamicBet2, "cashout2": 12 },
+                { "bet1": dynamicBet1, "cashou1": 15, "bet2": dynamicBet2, "cashout2": 15 }
             ]
         };
 
@@ -393,7 +483,6 @@
             const resultData = await response.json();
             renderApiStrategyResponseTable(resultData, dynamicBet1, dynamicBet2);
         } catch (err) {
-            // Dynamically generate fallback results using all unique dates from allRowsData
             const dateMapFallback = {};
             allRowsData.forEach(r => { if (!dateMapFallback[r.date]) dateMapFallback[r.date] = r; });
             const uniqueDateKeys = Object.keys(dateMapFallback);
@@ -401,21 +490,21 @@
             const mockData = uniqueDateKeys.length > 0 ? uniqueDateKeys.map(dt => ({
                 "date": dt,
                 "bestStrategyResult": {
-                    "strategy": { "bet1": dynamicBet1, "cashou1": 9, "bet2": dynamicBet2, "cashout2": 30 },
+                    "strategy": { "bet1": dynamicBet1, "cashou1": 18, "bet2": dynamicBet2, "cashout2": 50 },
                     "status": "TARGET_REACHED",
                     "maxAmountRequired": 120,
-                    "finalProfit": 560,
-                    "data": { "roundNumber": 101, "date": dt, "time": dateMapFallback[dt].time || "12:00:00 AM", "multiplier": "34.29x", "amountRequired": 120, "currentRoundNetProfit": 410, "totalProfit": 560, "targetAmount": targetAmountVal }
+                    "finalProfit": 664,
+                    "data": { "roundNumber": 101, "date": dt, "time": dateMapFallback[dt].time || "00:00:00", "multiplier": "52.00x", "amountRequired": 120, "currentRoundNetProfit": 510, "totalProfit": 664, "targetAmount": targetAmountVal }
                 }
             })) : [
                 {
                     "date": "22/08/2026",
                     "bestStrategyResult": {
-                        "strategy": { "bet1": dynamicBet1, "cashou1": 8, "bet2": dynamicBet2, "cashout2": 30 },
+                        "strategy": { "bet1": dynamicBet1, "cashou1": 18, "bet2": dynamicBet2, "cashout2": 50 },
                         "status": "TARGET_REACHED",
                         "maxAmountRequired": 1940,
-                        "finalProfit": 560,
-                        "data": { "roundNumber": 567, "date": "22/08/2026", "time": "03:13:25 AM", "multiplier": "103.86x", "amountRequired": 1940, "currentRoundNetProfit": 360, "totalProfit": 560, "targetAmount": targetAmountVal }
+                        "finalProfit": 664,
+                        "data": { "roundNumber": 567, "date": "22/08/2026", "time": "03:13:25", "multiplier": "52.00x", "amountRequired": 1940, "currentRoundNetProfit": 510, "totalProfit": 664, "targetAmount": targetAmountVal }
                     }
                 }
             ];
@@ -459,7 +548,6 @@
             const resultData = await response.json();
             renderSingleOptimalTable(resultData);
         } catch (err) {
-            // Dynamically generate fallback results using all unique dates from allRowsData
             const dateMapFallback = {};
             allRowsData.forEach(r => { if (!dateMapFallback[r.date]) dateMapFallback[r.date] = r; });
             const uniqueDateKeys = Object.keys(dateMapFallback);
@@ -467,21 +555,21 @@
             const sampleData = uniqueDateKeys.length > 0 ? uniqueDateKeys.map(dt => ({
                 "date": dt,
                 "bestStrategyResult": {
-                    "strategy": { "bet1": bet1 || 10, "cashou1": cashou1 || 30, "bet2": bet2 || 20, "cashout2": cashout2 || 8 },
+                    "strategy": { "bet1": bet1 || 10, "cashou1": cashou1 || 18, "bet2": bet2 || 10, "cashout2": cashout2 || 50 },
                     "status": "TARGET_REACHED",
                     "maxAmountRequired": 150,
-                    "finalProfit": 750,
-                    "data": { "roundNumber": 202, "date": dt, "time": dateMapFallback[dt].time || "12:00:00 AM", "multiplier": "42.35x", "amountRequired": 150, "currentRoundNetProfit": 430, "totalProfit": 750, "targetAmount": targetAmount || 700 }
+                    "finalProfit": 664,
+                    "data": { "roundNumber": 202, "date": dt, "time": dateMapFallback[dt].time || "00:00:00", "multiplier": "52.00x", "amountRequired": 150, "currentRoundNetProfit": 510, "totalProfit": 664, "targetAmount": targetAmount || 700 }
                 }
             })) : [
                 {
                     "date": "22/08/2026",
                     "bestStrategyResult": {
-                        "strategy": { "bet1": bet1 || 10, "cashou1": cashou1 || 30, "bet2": bet2 || 20, "cashout2": cashout2 || 8 },
+                        "strategy": { "bet1": bet1 || 10, "cashou1": cashou1 || 18, "bet2": bet2 || 10, "cashout2": cashout2 || 50 },
                         "status": "TARGET_REACHED",
                         "maxAmountRequired": 2810,
-                        "finalProfit": 750,
-                        "data": { "roundNumber": 621, "date": "22/08/2026", "time": "03:28:44 AM", "multiplier": "42.35x", "amountRequired": 2810, "currentRoundNetProfit": 430, "totalProfit": 750, "targetAmount": targetAmount || 700 }
+                        "finalProfit": 664,
+                        "data": { "roundNumber": 621, "date": "22/08/2026", "time": "03:28:44", "multiplier": "52.00x", "amountRequired": 2810, "currentRoundNetProfit": 510, "totalProfit": 664, "targetAmount": targetAmount || 700 }
                     }
                 }
             ];
@@ -547,7 +635,7 @@
             const b1 = strat.bet1 !== undefined ? strat.bet1 : fallbackBet1;
             const c1 = strat.cashou1 !== undefined ? strat.cashou1 : strat.cashout1;
             const b2 = strat.bet2 !== undefined ? strat.bet2 : fallbackBet2;
-            const c2 = strat.cashout2 !== undefined ? strat.cashout2 : 30;
+            const c2 = strat.cashout2 !== undefined ? strat.cashout2 : 50;
             
             const rawAmtReq = Math.abs(item.bestStrategyResult.maxAmountRequired);
             const amtReqFormatted = rawAmtReq > 0 ? `-${rawAmtReq}` : `0`;
@@ -586,6 +674,28 @@
         }
     }
 
+    function convertTo24HourFormat(timeStr) {
+        if (!timeStr || timeStr === '-') return '00:00:00';
+        let cleanTime = timeStr.trim();
+        const upper = cleanTime.toUpperCase();
+        if (upper.includes('AM') || upper.includes('PM')) {
+            const parts = cleanTime.split(' ');
+            if (parts.length >= 2) {
+                const hms = parts[0].split(':');
+                let hours = parseInt(hms[0], 10) || 0;
+                const minutes = hms[1] || '00';
+                const seconds = hms[2] || '00';
+                const modifier = parts[1].toUpperCase();
+
+                if (modifier === 'PM' && hours < 12) hours += 12;
+                if (modifier === 'AM' && hours === 12) hours = 0;
+
+                return `${String(hours).padStart(2, '0')}:${minutes}:${seconds}`;
+            }
+        }
+        return cleanTime;
+    }
+
     function processCSV(csvText) {
         const lines = csvText.trim().split('\n').filter(l => l.trim().length > 0);
         const rows = lines.length > 0 && lines[0].toLowerCase().includes('date') ? lines.slice(1) : lines;
@@ -596,11 +706,11 @@
             if (parts.length >= 3) {
                 let rawDate = parts[0].replace(/\\/g, '');
                 let standardizedDate = rawDate.replace(/\//g, '-');
-                let foundTime = '-';
+                let foundTime = '00:00:00';
                 let foundMultStr = parts[parts.length - 1].replace(/x/gi, '').trim();
 
-                if (parts[1] && parts[1].includes(':')) {
-                    foundTime = parts[1];
+                if (parts[1] && (parts[1].includes(':') || parts[1].toUpperCase().includes('AM') || parts[1].toUpperCase().includes('PM'))) {
+                    foundTime = convertTo24HourFormat(parts[1]);
                     foundMultStr = parts[2].replace(/x/gi, '').trim();
                 }
 
@@ -631,21 +741,54 @@
         }, 150);
     }
 
+    function resetTimeFilter() {
+        document.getElementById('fromHour').value = "00";
+        document.getElementById('fromMinute').value = "00";
+        document.getElementById('fromSecond').value = "00";
+
+        document.getElementById('toHour').value = "23";
+        document.getElementById('toMinute').value = "59";
+        document.getElementById('toSecond').value = "59";
+        scheduleCalculation();
+    }
+
+    function parseTimeToSeconds(timeStr) {
+        if (!timeStr || timeStr === '-') return 0;
+        try {
+            const clean = convertTo24HourFormat(timeStr);
+            const hms = clean.split(':');
+            const hours = parseInt(hms[0], 10) || 0;
+            const minutes = parseInt(hms[1], 10) || 0;
+            const seconds = parseInt(hms[2], 10) || 0;
+            return hours * 3600 + minutes * 60 + seconds;
+        } catch (e) {
+            return 0;
+        }
+    }
+
     function runCalculations() {
         const userBet1 = parseFloat(document.getElementById('bet1Input').value) || 10;
         const userBet2 = parseFloat(document.getElementById('bet2Input').value) || 10;
         const userEnteredTarget = parseFloat(document.getElementById('plTargetInput').value) || 400;
 
+        const fromTimeStr = getFromTime();
+        const toTimeStr = getToTime();
+        const fromSeconds = parseTimeToSeconds(fromTimeStr);
+        const toSeconds = parseTimeToSeconds(toTimeStr);
+
         const dateMap = {};
         allRowsData.forEach(row => {
-            if (!dateMap[row.date]) dateMap[row.date] = [];
-            dateMap[row.date].push(row);
+            const rowSeconds = parseTimeToSeconds(row.time);
+            if (rowSeconds >= fromSeconds && rowSeconds <= toSeconds) {
+                if (!dateMap[row.date]) dateMap[row.date] = [];
+                dateMap[row.date].push(row);
+            }
         });
 
         const uniqueDates = Object.keys(dateMap);
         if (uniqueDates.length === 0) {
-            document.getElementById('plCustomResultContent').innerHTML = `<tr><td colspan="4" class="no-data">Ensure data is loaded.</td></tr>`;
-            document.getElementById('dailyCrossingResultContent').innerHTML = `<tr><td colspan="4" class="no-data">Ensure data is loaded.</td></tr>`;
+            document.getElementById('plCustomResultContent').innerHTML = `<tr><td colspan="4" class="no-data">No data found in the given time range (${fromTimeStr} to ${toTimeStr}).</td></tr>`;
+            document.getElementById('dailyCrossingResultContent').innerHTML = `<tr><td colspan="4" class="no-data">No data found in the given time range.</td></tr>`;
             const ind = document.getElementById('loadingIndicator');
             if (ind) ind.style.display = 'none';
             return;
@@ -653,16 +796,16 @@
 
         const multipliers = [
             1.1, 1.2, 1.3, 1.5, 1.8, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 
-            12, 15, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200, 300, 500, 1000
+            12, 15, 18, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200, 300, 500, 1000
         ];
 
         let independentBest = null;
-        let highestMinStop = -Infinity;
+        let highestPeakProfit = -Infinity;
 
         for (let c1 of multipliers) {
             for (let c2 of multipliers) {
                 let allPassed = true;
-                let minStopOnAnyDay = Infinity;
+                let minPeakOnAnyDay = Infinity;
 
                 for (let d = 0; d < uniqueDates.length; d++) {
                     const rowObjs = dateMap[uniqueDates[d]];
@@ -692,15 +835,16 @@
                         break;
                     }
 
-                    if (maxLock < minStopOnAnyDay) {
-                        minStopOnAnyDay = maxLock;
+                    if (peakP < minPeakOnAnyDay) {
+                        minPeakOnAnyDay = peakP;
                     }
                 }
 
                 if (allPassed) {
-                    if (minStopOnAnyDay > highestMinStop) {
-                        highestMinStop = minStopOnAnyDay;
-                        independentBest = { c1, c2, minStop: minStopOnAnyDay };
+                    // Selecting the absolute maximum ceiling combination based on true peak performance across all evaluated days
+                    if (minPeakOnAnyDay > highestPeakProfit) {
+                        highestPeakProfit = minPeakOnAnyDay;
+                        independentBest = { c1, c2, peakProfit: minPeakOnAnyDay };
                     }
                 }
             }
@@ -709,10 +853,10 @@
         const strategyBoxElem = document.getElementById('independentStrategyText');
         if (independentBest) {
             strategyBoxElem.innerHTML = `
-                Hey! If you place <strong>Bet 1 of ${userBet1}</strong> and cash out at <strong>${independentBest.c1}x</strong>, and <strong>Bet 2 of ${userBet2}</strong> and cash out at <strong>${independentBest.c2}x</strong> for every single day, your least highest recommended stop amount on any single day is <span class="positive">+${independentBest.minStop.toFixed(2)}</span> with 100% daily consistency![cite: 3]
+                Hey! If you place <strong>Bet 1 of ${userBet1}</strong> and cash out at <strong>${independentBest.c1}x</strong>, and <strong>Bet 2 of ${userBet2}</strong> and cash out at <strong>${independentBest.c2}x</strong> for every single day within range (${fromTimeStr} - ${toTimeStr}), your peak combined amount on any single day is <span class="positive">+${independentBest.peakProfit.toFixed(2)}</span> with 100% daily consistency!
             `;
         } else {
-            strategyBoxElem.innerHTML = `No 100% consistent independent strategy configuration could be resolved with the current bet inputs.`;
+            strategyBoxElem.innerHTML = `No 100% consistent independent strategy configuration could be resolved with the current bet inputs and time range.`;
         }
 
         let successfulCombos = [];
@@ -783,7 +927,7 @@
 
         let resultsTableHtml = '';
         if (successfulCombos.length === 0) {
-            resultsTableHtml = `<tr><td colspan="4" class="no-data">No strategy reached target (${userEnteredTarget}) across ALL ${uniqueDates.length} dates. Try lowering your target amount.</td></tr>`;
+            resultsTableHtml = `<tr><td colspan="4" class="no-data">No strategy reached target (${userEnteredTarget}) across ALL ${uniqueDates.length} dates within range. Try lowering your target amount.</td></tr>`;
         } else {
             successfulCombos.slice(0, 15).forEach((res, index) => {
                 const isBest = index === 0;
@@ -871,6 +1015,7 @@
         if (loadingIndicator) loadingIndicator.style.display = 'none';
     }
 
+    initTimeDropdowns();
     fetchCSVData();
     fetchCurrentBalance();
     fetchBetStatus();
